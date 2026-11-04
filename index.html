@@ -943,25 +943,27 @@ function renderRes(){const r=S.res,b=$('#res'),hr=document.querySelector('.hero'
 b.innerHTML=`<div class="rh"><div><span class="mut">Search</span> <b>${esc(S.term)}</b> &nbsp;<span class="pill ok">${r.length} result${r.length>1?'s':''} found</span></div><select id="so">${[['reg','Registration'],['make','Manufacturer'],['model','Model'],['upd','Recently updated']].map(o=>`<option value="${o[0]}" ${S.sort===o[0]?'selected':''}>Sort: ${o[1]}</option>`).join('')}</select></div>`+`<div class="rl">`+r.slice(0,S.shown).map(v=>`<button class="rli" data-v="${esc(v.id)}"><span>${isFav(v.id)?'★ ':''}${esc(fmtReg(v.regNo||v.id))}</span><i>›</i></button>`).join('')+`</div>`+(r.length>S.shown?'<button class="btn ghost full" id="more">Show more ('+(r.length-S.shown)+' left)</button>':'');
 $('#so').onchange=e=>{S.sort=e.target.value;sortRes();renderRes()}}
 /* ---------- staff search: simple prefix + last-digits panel ---------- */
-let SK={p:'',d:'',res:[],searched:false,busy:false};
-async function vSearchStaff(){let n=+(localStorage.getItem('jk_off_n')||0);try{n=await cn(col('vehicles'));if(navigator.onLine)try{localStorage.setItem('jk_off_n',n)}catch{}}catch(e){}
+let SK={p:'',d:'',res:[],searched:false,busy:false},SKQ=0,SKL,SKLG,SKC=new Map();
+async function vSearchStaff(){SKC.clear();let n=+(localStorage.getItem('jk_off_n')||0);try{n=await cn(col('vehicles'));if(navigator.onLine)try{localStorage.setItem('jk_off_n',n)}catch{}}catch(e){}
 $('#main').innerHTML=`<div class="sk"><div class="sk-cnt">TOTAL DATA COUNT: ${n.toLocaleString()}</div><div class="sk-row"><input id="skp" placeholder="State / series (e.g. MH)" value="${esc(SK.p)}" autocomplete="off" autocapitalize="characters" spellcheck="false"><input id="skd" placeholder="Last Digits" value="${esc(SK.d)}" inputmode="numeric" autocomplete="off" enterkeyhint="search"><button class="sk-go" id="skg">Search</button></div><div id="skr"></div></div>`;
-$('#skg').onclick=skRun;$('#skd').onkeydown=$('#skp').onkeydown=e=>{if(e.key==='Enter')skRun()};
+$('#skg').onclick=()=>skRun();$('#skd').onkeydown=$('#skp').onkeydown=e=>{if(e.key==='Enter'){e.target.blur();skRun()}};
+$('#skd').oninput=$('#skp').oninput=()=>{clearTimeout(SKL);SKL=setTimeout(()=>skRun(true),150)};
 $('#skr').onclick=e=>{const v=e.target.closest('[data-v]');if(v)detail(v.dataset.v)};
 paintOff();if(SK.searched)skPaint()}
 function skPaint(){const b=$('#skr');if(!b)return;if(!SK.res.length){b.innerHTML='<div class="sk-no">No vehicle found.<br>Please check the number and try again.</div>';return}
 b.innerHTML=`<div class="sk-n">${SK.res.length} found</div><div class="sk-g">${SK.res.map(v=>`<button data-v="${esc(v.id)}">${esc(v.regNorm||norm(v.regNo||v.id))}</button>`).join('')}</div>`}
-async function skRun(){const p=norm($('#skp').value),d=norm($('#skd').value);SK.p=$('#skp').value.trim();SK.d=$('#skd').value.trim();
-let t,pre=p,suf=d;if(d.length>=3){t=d;suf=''}else if(p.length>=4){t=p;pre=''}else return toast('Enter at least 3 last digits',true);
-if(SK.busy)return;SK.busy=true;$('#skr').innerHTML=skel(6);
-try{const q=query(col('vehicles'),where('regTokens','array-contains',t),limit(300));const s=await (navigator.onLine?getDocs(q):FSX.getDocsFromCache(q));
+async function skRun(live){clearTimeout(SKL);clearTimeout(SKLG);const p=norm($('#skp').value),d=norm($('#skd').value);SK.p=$('#skp').value.trim();SK.d=$('#skd').value.trim();
+let t,pre=p,suf=d,rng=false;if(d.length>=3){t=d;suf=''}else if(p.length>=4){t=p;pre=''}else if(p.length>=1){rng=true}else{SKQ++;SK.res=[];SK.searched=false;const b=$('#skr');if(b)b.innerHTML=d.length?'<div class="sk-no">Type State / series (e.g. MH) with it,<br>or enter at least 3 last digits.</div>':'';return}
+const my=++SKQ;if(!SK.searched&&!$('#skr').children.length)$('#skr').innerHTML=skel(6);
+try{const q=rng?query(col('vehicles'),where('regNorm','>=',p),where('regNorm','<=',p+'\uf8ff'),orderBy('regNorm'),limit(1000)):query(col('vehicles'),where('regTokens','array-contains',t),limit(300));const s=(rng&&SKC.get(p))||await (navigator.onLine?getDocs(q):FSX.getDocsFromCache(q));
+if(my!==SKQ)return;if(rng){if(s.size>=1000){SK.res=[];SK.searched=false;$('#skr').innerHTML='<div class="sk-no">Too many records for "'+esc(SK.p)+'".<br>Add more characters (e.g. MH12) or enter 3+ last digits.</div>';return}SKC.set(p,s);if(SKC.size>15)SKC.delete(SKC.keys().next().value)}
 let r=s.docs.map(x=>({id:x.id,...x.data()})).filter(v=>v.active!==false);
 const key=v=>v.regNorm||norm(v.regNo||v.id);
 if(pre)r=r.filter(v=>key(v).startsWith(pre));if(suf)r=r.filter(v=>key(v).endsWith(suf));
 r.sort((a,b)=>key(a).localeCompare(key(b),'en',{numeric:true}));SK.res=r;SK.searched=true;skPaint();
-if(s.size>=300)toast('Showing the first 300 matches. Add more digits to narrow down.');
-log({type:'search',kind:'reg',term:(SK.p+' '+SK.d).trim(),count:r.length})}
-catch(e){$('#skr').innerHTML='';E(e)}finally{SK.busy=false}}
+if(s.size>=300&&!live)toast('Showing the first 300 matches. Add more digits to narrow down.');
+const lg=()=>log({type:'search',kind:'reg',term:(SK.p+' '+SK.d).trim(),count:r.length});if(live)SKLG=setTimeout(()=>{if(my===SKQ)lg()},1500);else lg()}
+catch(e){if(my===SKQ){const b=$('#skr');if(b)b.innerHTML='';E(e)}}}
 async function detail(id){try{const s=await gdoc(doc(fs,'vehicles',id));if(!s.exists())return;let v={id,...s.data()};if(cc()){try{v={...v,...(await gdoc(doc(fs,'vehicles',id,'private','d'))).data()}}catch{}}
 log({type:'open',term:v.regNo||v.id});const d=x=>x?new Date(x).toLocaleString():'';
 const cp=()=>'',kv=(l,val,x='')=>val?`<div class="kv"><span class="mut">${l}</span><span>${esc(val)} ${x}</span></div>`:'';
