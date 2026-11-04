@@ -962,7 +962,7 @@ const key=v=>v.regNorm||norm(v.regNo||v.id);
 if(pre)r=r.filter(v=>key(v).startsWith(pre));if(suf)r=r.filter(v=>key(v).endsWith(suf));
 r.sort((a,b)=>key(a).localeCompare(key(b),'en',{numeric:true}));SK.res=r;SK.searched=true;skPaint();
 if(s.size>=300&&!live)toast('Showing the first 300 matches. Add more digits to narrow down.');
-const lg=()=>log({type:'search',kind:'reg',term:(SK.p+' '+SK.d).trim(),count:r.length});if(live)SKLG=setTimeout(()=>{if(my===SKQ)lg()},1500);else lg()}
+const lg=()=>log({type:'search',kind:'reg',term:(SK.p+' '+SK.d).trim(),count:r.length});lg()}
 catch(e){if(my===SKQ){const b=$('#skr');if(b)b.innerHTML='';E(e)}}}
 async function detail(id){try{const s=await gdoc(doc(fs,'vehicles',id));if(!s.exists())return;let v={id,...s.data()};if(cc()){try{v={...v,...(await gdoc(doc(fs,'vehicles',id,'private','d'))).data()}}catch{}}
 log({type:'open',term:v.regNo||v.id});const d=x=>x?new Date(x).toLocaleString():'';
